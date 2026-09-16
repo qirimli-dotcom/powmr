@@ -183,6 +183,15 @@ footer .wrap{padding:26px 22px;color:var(--sub);font-size:12.5px;display:flex;ju
 .badge.bump{animation:badgePop .45s ease}
 .cartbtn.bump{animation:cartBounce .55s ease}
 .fly{position:fixed;z-index:200;border-radius:10px;object-fit:contain;background:#fff;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.25);pointer-events:none;transition:transform .75s cubic-bezier(.5,-0.3,.4,1),opacity .75s ease;will-change:transform,opacity}
+.act{display:flex;align-items:center}
+.qtyc{display:inline-flex;align-items:center;border:1.5px solid var(--accent);border-radius:10px;overflow:hidden;animation:pop .32s ease}
+.qtyc button{width:34px;height:36px;border:0;background:var(--accent);color:#fff;font-size:19px;line-height:1;cursor:pointer;transition:.12s}
+.qtyc button:hover{background:var(--accent-d)}
+.qtyc button:active{transform:scale(.9)}
+.qtyc span{min-width:40px;text-align:center;font-weight:800;font-family:Manrope;font-size:15px;color:var(--ink)}
+.qtyc.big button{width:42px;height:44px;font-size:22px}
+.qtyc.big span{min-width:48px;font-size:18px}
+.mact{display:flex;align-items:center;gap:12px}
 </style></head><body>
 
 <nav class="nav"><div class="wrap">
@@ -264,7 +273,7 @@ function cardHTML(it){
     <div class="imgbox"><span class="tag">${it.cat}</span><img src="${it.img}" alt="${it.sku}" loading="lazy"></div>
     <div class="body"><div class="sku">${it.sku}</div><div class="typ">${it.typ}</div>
     <div class="specs">${it.short.map(s=>`<span class="spec">${s}</span>`).join('')}</div>
-    <div class="prow"><div><div class="plabel">Цена</div><div class="price">${it.price}<small>₽</small></div></div><button class="add" onclick='event.stopPropagation();addToCart("${it.sku}",event)'>+ в корзину</button></div></div></div>`;
+    <div class="prow"><div><div class="plabel">Цена</div><div class="price">${it.price}<small>₽</small></div></div><div class="act" id="ctl-${ITEMS.indexOf(it)}">${ctlHTML(it)}</div></div></div></div>`;
 }
 function render(){
   const list=ITEMS.filter(match);
@@ -296,7 +305,8 @@ function openModal(sku){
     <div class="mbody"><h4>Характеристики</h4><ul>${it.full.map(s=>`<li>${s}</li>`).join('')}</ul>
       <div class="mmeta">Упаковка / вес: ${it.pack}</div>
       <div class="mfoot"><div><div class="plabel">Цена</div><div class="mprice">${it.price} <small style="font-size:15px;color:var(--sub)">₽</small></div></div>
-      <button class="cta" onclick='addToCart("${it.sku}",event);closeModal()'>+ в корзину</button></div></div>`;
+      <div class="mact"><div class="qtyc big"><button onclick="mQty(-1)">−</button><span id="mq">${CART[it.sku]||1}</span><button onclick="mQty(1)">+</button></div>
+      <button class="cta" onclick='mAdd("${it.sku}",event)'>В корзину</button></div></div></div>`;
   ov.classList.add('open');
 }
 function closeModal(){ov.classList.remove('open');}
@@ -334,20 +344,42 @@ function flyToCart(srcImg){
   setTimeout(()=>fly.remove(),900);
 }
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1500);}
-function addToCart(sku,ev){
-  CART[sku]=(CART[sku]||0)+1;saveCart();updateBadge();renderCart();
-  const btn=ev&&ev.currentTarget;
-  let srcImg=null;
-  if(btn){const card=btn.closest('.card');srcImg=card?card.querySelector('.imgbox img'):document.querySelector('.mimg img');
-    btn.classList.add('added');const t0=btn.textContent;btn.textContent='✓ добавлено';
-    setTimeout(()=>{btn.classList.remove('added');btn.textContent=t0;},1100);}
-  if(!srcImg){const it=ITEMS.find(x=>x.sku===sku);}
-  flyToCart(srcImg||document.querySelector('.mimg img'));
-  bump(document.getElementById('badge'),'bump');
-  bump(document.getElementById('cartbtn'),'bump');
+
+// контрол на карточке: кнопка ИЛИ счётчик (постоянный)
+function ctlHTML(it){
+  const q=CART[it.sku]||0;
+  if(q>0) return `<div class="qtyc"><button onclick='event.stopPropagation();cartStep("${it.sku}",-1,event)'>−</button><span>${q}</span><button onclick='event.stopPropagation();cartStep("${it.sku}",1,event)'>+</button></div>`;
+  return `<button class="add" onclick='event.stopPropagation();cartStep("${it.sku}",1,event)'>+ в корзину</button>`;
 }
-function setQty(sku,d){CART[sku]=(CART[sku]||0)+d;if(CART[sku]<=0)delete CART[sku];saveCart();updateBadge();renderCart();}
-function removeItem(sku){delete CART[sku];saveCart();updateBadge();renderCart();}
+function renderCtl(sku){const i=ITEMS.findIndex(x=>x.sku===sku);const el=document.getElementById('ctl-'+i);if(el)el.innerHTML=ctlHTML(ITEMS[i]);}
+function srcImgFor(ev,sku){
+  const btn=ev&&ev.currentTarget;
+  if(btn){const card=btn.closest('.card');if(card)return card.querySelector('.imgbox img');}
+  return document.querySelector('.mimg img');
+}
+function cartStep(sku,d,ev){
+  const was=CART[sku]||0;
+  CART[sku]=was+d; if(CART[sku]<=0)delete CART[sku];
+  saveCart();updateBadge();renderCtl(sku);renderCart();
+  if(d>0){
+    flyToCart(srcImgFor(ev,sku));
+    bump(document.getElementById('badge'),'bump');
+    bump(document.getElementById('cartbtn'),'bump');
+  }
+}
+function addToCart(sku,ev){cartStep(sku,1,ev);}      // совместимость
+function setQty(sku,d){cartStep(sku,d);renderCtl(sku);}
+function removeItem(sku){delete CART[sku];saveCart();updateBadge();renderCtl(sku);renderCart();}
+
+// модалка: выбор количества
+function mQty(d){const s=document.getElementById('mq');let v=(parseInt(s.textContent)||1)+d;if(v<1)v=1;s.textContent=v;}
+function mAdd(sku,ev){
+  const v=parseInt(document.getElementById('mq').textContent)||1;
+  CART[sku]=v;saveCart();updateBadge();renderCtl(sku);renderCart();
+  flyToCart(document.querySelector('.mimg img'));
+  bump(document.getElementById('badge'),'bump');bump(document.getElementById('cartbtn'),'bump');
+  toast('В корзине: '+v+' шт.');closeModal();
+}
 
 const drawer=document.getElementById('drawer'),cartov=document.getElementById('cartov');
 function openCart(){renderCart();cartov.classList.add('open');drawer.classList.add('open');}
@@ -404,7 +436,7 @@ function submitOrder(){
 }
 function copyOrder(){const t=window._order||'';navigator.clipboard?.writeText(t).then(()=>toast('Текст заявки скопирован'),()=>fallbackCopy(t));if(!navigator.clipboard)fallbackCopy(t);}
 function fallbackCopy(t){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy');toast('Скопировано');}catch(e){}a.remove();}
-function clearCart(){CART={};saveCart();updateBadge();setTimeout(()=>{renderCart();},400);}
+function clearCart(){CART={};saveCart();updateBadge();setTimeout(()=>{renderCart();render();},400);}
 
 function inquire(sku){openCart();}
 updateBadge();
